@@ -1,0 +1,92 @@
+module odd_even_div (
+//input
+input wire clk,
+input wire rst_n,
+input wire rst_n_clkn,
+input wire [7:0] div_cfg,
+// output
+output wire done,
+output wire clko
+);
+/// counter
+// reg [7:0]  div_cfg;
+reg div_clk_r;
+reg div_clk_f;
+
+
+reg [7:0]  cnt;
+
+wire [7:0] signal_chg_1st;
+wire [7:0] signal_chg_2nd;
+
+wire [7:0] signal_shift_r;
+wire clko_pre;
+
+wire even_or_odd;
+
+////////////////////////////////////////////
+// control div_cfg changes
+reg  [7:0]  div_cfg_r;
+reg [2:0]  div_cfg_chg;
+
+always @(posedge clk  or negedge rst_n) begin
+if (~rst_n)
+div_cfg_r <= 8'h02;
+div_cfg_chg<=3'b000;
+else if (div_cfg!=div_cfg_r && |div_cfg && ~div_clk_r&& ~div_clk_f) 
+div_cfg_chg<=3'b111;
+div_cfg_r <= div_cfg;
+else
+div_cfg_chg<={div_cfg[1:0],1'b0};
+end
+
+// 
+assign done = ~div_cfg_chg[2];
+
+////////////////////////////////////////////
+assign even_or_odd = ^div_cfg_r;
+
+//wire  clko;
+assign signal_shift_r = div_cfg_r >>1;
+assign signal_chg_1st = even_or_odd ? div_cfg_r>> 1: (div_cfg_r-{{7{1'b0}},1'b1})>>1;
+
+assign signal_chg_2nd = div_cfg_r;
+
+
+always @(posedge clk  or negedge rst_n) begin
+if (~rst_n)
+cnt <= 8'h00;
+else if (div_cfg_chg[2]) //synchronous reset counter and stay 3 cycles after div_cfg changes
+cnt <= 8'h00
+else if (cnt==div_cfg_r)
+cnt <= 8'h01;
+else
+cnt <= cnt +1;
+end
+
+
+always @(posedge clk or negedge rst_n) begin
+if (~rst_n)
+div_clk_r <= 1'b0;
+else if (div_cfg_chg[2])
+div_clk_f <= 1'b0;
+else if (cnt==8'h00)
+div_clk_r <= 1'b1;
+else if (cnt== signal_chg_1st  || cnt== signal_chg_2nd)
+div_clk_r <= ~div_clk_r;
+end
+
+always @(negedge clk  or negedge rst_n_clkn) begin
+if (~rst_n_clkn)
+div_clk_f <= 1'b0;
+else if (div_cfg_chg[2])
+div_clk_f <= 1'b0;
+else if (cnt==8'h01)
+div_clk_f <= 1'b1;
+else if (cnt== signal_chg_1st +'b1 )
+div_clk_f <= ~div_clk_f;
+end
+assign clko_pre = even_or_odd? div_clk_r : div_clk_f || div_clk_r;
+assign clk_o = clko_pre &(~div_cfg_chg[2]);
+endmodule
+
